@@ -1,0 +1,21 @@
+% Harness de teste: compila o MESMO artigo.tex em PDF com macros mínimas.
+% No repositório real, isto é substituído por shared/styles/macros.tex + layout da edição.
+\documentclass[11pt]{article}
+\usepackage{fontspec}
+\usepackage[provide=*]{babel}\babelprovide[main,import]{portuguese}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx,xcolor,url,hyperref}
+\graphicspath{{../articles/teste-fluxo/}}
+\definecolor{HypeOrange}{HTML}{FF6B1A}\definecolor{HypePurple}{HTML}{8A5CF5}
+
+\newcommand{\hypearticle}[3]{\section*{#1}\textit{Por #2}\par\bigskip #3\par}
+\newcommand{\subtitle}[1]{\subsection*{\textcolor{HypePurple}{#1}}}
+\newcommand{\highlight}[1]{\par\medskip\noindent\colorbox{HypePurple!15}{\parbox{\dimexpr\linewidth-2\fboxsep}{#1}}\par\medskip}
+\newenvironment{infobox}{\par\medskip\noindent\begin{minipage}{\linewidth}\color{HypeOrange}\hrule\medskip\color{black}}{\medskip\color{HypeOrange}\hrule\end{minipage}\par\medskip}
+\newenvironment{hypeitemize}{\begin{itemize}}{\end{itemize}}
+\newcommand{\articleimage}[3]{\begin{center}\includegraphics[width=#1\linewidth]{#2}\\[2pt]{\small #3}\end{center}}
+\newcommand{\originalsource}[1]{\par\medskip Fonte original: \url{#1}\par}
+
+\begin{document}
+\input{../articles/teste-fluxo/artigo.tex}
+\end{document}

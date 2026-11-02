@@ -1,0 +1,47 @@
+% Artigo de teste do fluxo LaTeX -> HTML -> Medium.
+% Usa as mesmas macros do template Tá no Hype (README do repositório).
+
+\hypearticle
+{Do LaTeX ao Medium: testando um fluxo de publicação}
+{Equipe Hype Data \& AI}
+{
+
+\hspace*{1.5em} Este artigo existe para validar uma ideia simples: escrever uma única vez em
+\LaTeX{} e distribuir em dois formatos, o PDF da newsletter e uma página web que o Medium
+consiga importar mantendo título, imagens, listas e destaques.
+
+\subtitle{Por que uma fonte única?}
+
+Quando o mesmo texto vive em dois lugares, cedo ou tarde eles divergem. Com uma fonte única,
+a correção de uma vírgula no \texttt{.tex} se propaga para o PDF e para a versão web na
+próxima compilação. Acentuação, símbolos como 100\% e \& também precisam sobreviver à
+conversão.
+
+\articleimage{0.8}{img/figura.png}{Figura 1. Etapas do fluxo de publicação testado neste artigo.}
+
+\subtitle{O que queremos verificar}
+
+\begin{hypeitemize}
+  \item O título e o subtítulo chegam ao Medium com a hierarquia correta;
+  \item As imagens são baixadas pelo importador (URLs absolutas e públicas);
+  \item Listas, citações e caixas de destaque mantêm o sentido;
+  \item O link canônico aponta para a página de origem.
+\end{hypeitemize}
+
+\highlight{Se o Medium importar este bloco como uma citação, o destaque roxo do PDF
+virou um \emph{pull quote} na versão web.}
+
+\begin{infobox}
+\textbf{Caixa informativa.} No PDF ela é laranja; na web, uma citação com classe própria.
+Um exemplo de fórmula em linha: $E = mc^2$.
+\end{infobox}
+
+\subtitle{Próximo passo}
+
+Com a página publicada, o último passo é manual: importar a URL pelo recurso
+\emph{Import a story} do Medium e conferir o resultado com a lista de verificação do
+repositório.
+
+\originalsource{https://github.com/hype-usp/ta-no-hype-newsletter}
+
+}

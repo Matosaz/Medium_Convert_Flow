@@ -1,0 +1,8 @@
+dist/
+stub/build/
+__pycache__/
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.xdv

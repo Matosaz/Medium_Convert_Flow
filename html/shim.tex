@@ -1,0 +1,13 @@
+% Definições em LaTeX "padrão" das macros do template Hype.
+% Usadas APENAS na conversão para HTML (pandoc). O PDF continua usando
+% shared/styles/macros.tex do repositório da newsletter.
+%
+% Regra: cada macro Hype vira algo que o pandoc entende e que o Medium
+% (que só tem título, subtítulo, citação, lista, imagem e código) consegue ler.
+
+\newcommand{\subtitle}[1]{\section*{#1}}
+\newcommand{\highlight}[1]{\begin{quote}#1\end{quote}}
+\newenvironment{infobox}{\begin{hypeinfobox}}{\end{hypeinfobox}}
+\newenvironment{hypeitemize}{\begin{itemize}}{\end{itemize}}
+\newcommand{\articleimage}[3]{\begin{figure}\includegraphics{#2}\caption{#3}\end{figure}}
+\newcommand{\originalsource}[1]{\par Fonte original: \url{#1}\par}

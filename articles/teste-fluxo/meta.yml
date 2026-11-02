@@ -1,0 +1,10 @@
+# Metadados que NÃO estão no .tex (título e autor vêm do \hypearticle).
+slug: teste-fluxo
+edicao: "Teste"
+descricao: "Teste de um fluxo de publicação único: LaTeX para PDF, HTML e Medium."
+capa: img/capa.png
+tags: [latex, publicação, medium]
+data: "2026-11-01"          # data original (o Medium usa a da importação/canonical)
+pdf: ""                     # URL do PDF na Release, quando existir
+medium_url: ""              # preencher após importar no Medium
+# url_canonica: ""          # opcional; por padrão = <base-url>/artigos/<slug>/
