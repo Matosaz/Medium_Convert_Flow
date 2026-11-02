@@ -196,8 +196,7 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
     for bq in soup.find_all("blockquote"):
         next_sib = bq.find_next_sibling()
         if(next_sib and next_sib.name == "blockquote"):
-            sep = soup.new_tag("p")
-            sep.append(soup.new_tag("br"))
+            sep = soup.new_tag("hr")
             bq.insert_after(sep)
 
     # imagens: copiar para dist/ e reescrever para URL absoluta
@@ -211,17 +210,23 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
             missing.append(src)
         else:
             img["src"] = new
+            
         if not img.get("alt"):
             fig = img.find_parent("figure")
             cap = fig.find("figcaption").get_text(" ", strip=True) if fig and fig.find("figcaption") else ""
             img["alt"] = cap
     
-    for fc in soup.find_all("figcaption"):
-        fc.attrs.pop("aria-hidden", None)
-        fc["class"] = "imageCaption"
-        fc["conteneditable"] = "true"
-        fc["data-default-value"] = "Caption here!"
-        
+    for fig in soup.find_all("figure"):
+        fc = fig.find("figcaption")
+        if fc and fc.get_text(strip=True):
+            legenda_texto = fc.get_text(" ", strip=True)
+            p_legenda = soup.new_tag("p")
+            em_legenda = soup.new_tag("em")
+            em_legenda.string = legenda_texto
+            p_legenda.append(em_legenda)
+            # Insere o <p><em> logo após a figure e remove o figcaption problemático
+            fig.insert_after(p_legenda)
+            fc.decompose()
         
     for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
         h.attrs.pop("id", None)
@@ -244,9 +249,12 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
                 and blockish(t.previous_sibling) and blockish(t.next_sibling):
             t.extract()
             
+    # Remove qualquer título ou parágrafo que contenha apenas espaços em branco ou invisíveis.
     for empty in soup.find_all(["h1", "h2", "h3"]):
-        if not empty.get_text(strip=True) and not empty.find("img", "br"):
+        if not empty.find(["img", "br"]) and not re.sub(r'\s+', '', empty.get_text()):
             empty.decompose()
+            
+            
     content = "".join(str(c) for c in soup.body.contents).strip()
 
     cover_url = publish_image(meta["capa"]) if meta.get("capa") else None
