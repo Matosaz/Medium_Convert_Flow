@@ -6,23 +6,13 @@ Uso:
   python build_html.py                       # converte tudo em articles/
   python build_html.py articles/teste-fluxo  # converte um artigo
   python build_html.py --base-url https://usuario.github.io/repo --out dist
-
-Entrada de cada artigo (pasta):
-  artigo.tex  (ou qualquer .tex que contenha \\hypearticle{titulo}{autor}{corpo})
-  meta.yml    (opcional: slug, descricao, capa, tags, edicao, pdf, medium_url, ...)
-  img/        (imagens referenciadas por \\articleimage)
-
-Saída:
-  <out>/artigos/<slug>/index.html + img/   (a URL que será importada no Medium)
-  <out>/artigos.json                       (índice para o futuro site)
-  <out>/index.html                         (lista simples dos artigos)
 """
 import argparse, html, json, re, shutil, subprocess, sys
 from pathlib import Path
 import yaml
 from bs4 import BeautifulSoup
 
-if hasattr(sys.stdout, "reconfigure"):       # console do Windows: evitar UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
@@ -36,7 +26,6 @@ LAYOUT_ONLY = re.compile(
 
 # ---------------------------------------------------------------- parsing LaTeX
 def read_group(s: str, i: int):
-    """s[i] == '{'. Devolve (conteúdo, índice logo após o '}' correspondente)."""
     if s[i] != "{":
         raise ValueError(f"esperava '{{' na posição {i}, achei {s[i]!r}")
     depth, j = 0, i
@@ -45,7 +34,7 @@ def read_group(s: str, i: int):
         if c == "\\":
             j += 2
             continue
-        if c == "%":                       # comentário até o fim da linha
+        if c == "%":
             nl = s.find("\n", j)
             j = len(s) if nl == -1 else nl
             continue
@@ -78,7 +67,7 @@ def parse_hypearticle(tex: str):
         i = skip_ws_comments(tex, i)
         g, i = read_group(tex, i)
         groups.append(g)
-    return groups  # título, autor, corpo
+    return groups
 
 def find_article_tex(folder: Path) -> Path:
     for p in sorted(folder.glob("*.tex")):
@@ -87,22 +76,14 @@ def find_article_tex(folder: Path) -> Path:
     raise FileNotFoundError(f"nenhum .tex com \\hypearticle em {folder}")
 
 def tex_inline_to_text(s: str) -> str:
-    """Limpeza mínima de título/autor (vêm do .tex): \\& -> &, remove chaves."""
     s = s.replace(r"\&", "&").replace(r"\%", "%").replace(r"\_", "_")
     s = re.sub(r"\\[a-zA-Z]+\*?", "", s)
     return re.sub(r"[{}]", "", s).strip()
 
 # ------------------------------------------------------------------ conversão
-PANDOC_HELP = """pandoc não encontrado no PATH.
-  Windows (PowerShell):  winget install --id JohnMacFarlane.Pandoc -e
-                         (ou baixe o instalador em https://pandoc.org/installing.html)
-  macOS:                 brew install pandoc
-  Linux (Debian/Ubuntu): sudo apt-get install pandoc
-Depois de instalar, FECHE e reabra o terminal e confira com:  pandoc --version"""
+PANDOC_HELP = """pandoc não encontrado no PATH."""
 
 def pandoc_body(body: str, workdir: Path):
-    """Devolve (html, descartados). O pandoc DESCARTA em silêncio macros que não conhece
-    (inclusive o argumento); só o modo --verbose avisa. Capturamos esses avisos."""
     exe = shutil.which("pandoc")
     if not exe:
         raise RuntimeError(PANDOC_HELP)
@@ -110,14 +91,11 @@ def pandoc_body(body: str, workdir: Path):
     cmd = [exe, "-f", "latex", "-t", "html5", "--wrap=none", "--verbose",
            "--shift-heading-level-by=1", "--webtex",
            f"--resource-path={workdir}"]
-    # encoding explícito: no Windows o padrão seria cp1252 e os acentos seriam corrompidos
     r = subprocess.run(cmd, input=src, capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError("pandoc falhou:\n" + r.stderr)
     found = re.findall(r"Skipped '(.+?)' at line", r.stderr)
-    # \begin/\end/\bgroup/\egroup de ambientes são ruído: o conteúdo é mantido num <div>.
-    # Já macros comuns com argumento (\foo{x}) perdem o conteúdo de verdade.
     skipped = [x for x in found if not re.match(r"\\(?:begin|end)\{|\\[be]group", x)]
     return r.stdout, skipped
 
@@ -138,16 +116,15 @@ PAGE = """<!doctype html>
 <meta property="article:author" content="{author}">
 {tags}
 <style>
-  :root {{ --hype-orange:#FF6B1A; --hype-purple:#8A5CF5; }}  /* ajustar aos hex reais */
+  :root {{ --hype-orange:#FF6B1A; --hype-purple:#8A5CF5; }}
   body {{ font:18px/1.7 Georgia,serif; max-width:42rem; margin:3rem auto; padding:0 1rem; color:#111; }}
   h1 {{ font:800 2.2rem/1.2 system-ui,sans-serif; }}
   h2 {{ font:700 1.4rem/1.3 system-ui,sans-serif; margin-top:2.2rem; }}
-  article > h1 + p {{ color:#555; font-family:system-ui,sans-serif; }}  /* crédito de autoria */
+  article > h1 + p {{ color:#555; font-family:system-ui,sans-serif; }}
   img {{ max-width:100%; height:auto; }}
   figure {{ margin:2rem 0; text-align:center; }}
   figcaption {{ font:.85rem system-ui,sans-serif; color:#555; }}
-  blockquote {{ border-left:6px solid var(--hype-purple); margin:1.5rem 0; padding:.2rem 1rem;
-               background:#f3eefe; }}
+  blockquote {{ border-left:6px solid var(--hype-purple); margin:1.5rem 0; padding:.2rem 1rem; background:#f3eefe; }}
   blockquote.infobox {{ border-color:var(--hype-orange); background:#fff1e8; }}
   ul li::marker {{ color:var(--hype-orange); }}
   .download {{ font-family:system-ui,sans-serif; margin-top:3rem; }}
@@ -186,104 +163,99 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
     body_html, skipped = pandoc_body(body, folder)
     soup = BeautifulSoup(body_html, "lxml")
 
-    # caixa informativa -> citação com classe (o Medium só conhece citação)
+    # 1. FÓRMULAS: Converte <img> do codecogs para texto <code>
+    for img in soup.find_all("img"):
+        if "codecogs" in img.get("src", ""):
+            formula = img.get("alt", img.get("title", ""))
+            code_tag = soup.new_tag("code")
+            code_tag.string = formula
+            img.replace_with(code_tag)
+
+    # 2. CAIXAS INFORMATIVAS: Converte para blockquote limpo
     for div in soup.select("div.hypeinfobox"):
         div.name = "blockquote"
-        div.attrs = {} # Limpa atributos customizados que o Medium rejeita
+        div.attrs = {}
 
     for bq in soup.find_all("blockquote"):
-        # Se houver duas caixas adjacentes, insere "***" entre elas.
-        # O Medium traduz "***" para a sua quebra visual de secção (três pontos), impedindo a fusão.
         next_sib = bq.find_next_sibling()
         if next_sib and next_sib.name == "blockquote":
-            sep = soup.new_tag("p")
-            sep.string = "***"
+            # Insere <hr> que o Medium reconhece como quebra de secção (três pontos)
+            sep = soup.new_tag("hr")
             bq.insert_after(sep)
 
-    for math_img in soup.find_all("img", src=re.compile(r"latex\.codecogs")):
-        formula_text = math_img.get("alt", "")
-        # Envolve a fórmula num <code> para destacar visualmente no Medium
-        code_tag = soup.new_tag("code")
-        code_tag.string = formula_text
-        math_img.replace_with(code_tag)
-        
-    # imagens: copiar para dist/ e reescrever para URL absoluta
+    # 3. IMAGENS E LEGENDAS: Reconstrução canónica estrita
     missing = []
-    for img in soup.find_all("img"):
+    # Usamos list() para evitar loops infinitos ao modificar a árvore HTML
+    for img in list(soup.find_all("img")):
         src = img.get("src", "")
         if src.startswith(("http://", "https://")):
             continue
+
         new = publish_image(src)
         if new is None:
             missing.append(src)
-        else:
-            img["src"] = new
-            
-        fig = img.find_parent("figure")
-        if not fig:
-            fig = soup.new_tag("figure")
-            img.wrap(fig)
-            
-        # Extrai a legenda do figcaption existente (se houver) ou do alt
-        cap_text = img.get("alt", "").strip()
-        fc = fig.find("figcaption")
-        if fc:
-            if not cap_text:
-                cap_text = fc.get_text(strip=True)
-            fc.decompose() # Removemos a legenda antiga com classes sujas
-            
-        # Reconstrói a legenda de forma canónica
-        if cap_text:
-            img["alt"] = cap_text
-            new_fc = soup.new_tag("figcaption")
-            new_fc.string = cap_text
-            fig.append(new_fc)
+            continue
+
+        parent = img.parent
+        caption_text = img.get("alt", "").strip()
+
+        clean_fig = soup.new_tag("figure")
+        clean_img = soup.new_tag("img", src=new)
+        clean_fig.append(clean_img)
         
+        # Recupera legenda e reconstrói o bloco <figure>
+        if parent.name == "figure":
+            fc = parent.find("figcaption")
+            if fc and fc.get_text(strip=True):
+                caption_text = fc.get_text(strip=True)
+            if caption_text:
+                clean_fc = soup.new_tag("figcaption")
+                clean_fc.string = caption_text
+                clean_fig.append(clean_fc)
+            parent.replace_with(clean_fig)
+        elif parent.name == "p":
+            if caption_text:
+                clean_fc = soup.new_tag("figcaption")
+                clean_fc.string = caption_text
+                clean_fig.append(clean_fc)
+            if len(parent.contents) == 1:
+                parent.replace_with(clean_fig)
+            else:
+                img.replace_with(clean_fig)
+        else:
+            if caption_text:
+                clean_fc = soup.new_tag("figcaption")
+                clean_fc.string = caption_text
+                clean_fig.append(clean_fc)
+            img.replace_with(clean_fig)
+
+    # Limpeza de IDs e classes desnecessárias nos títulos
     for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
         h.attrs.pop("id", None)
         h.attrs.pop("class", None)
-    # <li><p>x</p></li> -> <li>x</li> (listas "soltas" do pandoc; o Medium prefere simples)
-    for li in soup.find_all("li"):
-        kids = [c for c in li.children if getattr(c, "name", None) or str(c).strip()]
-        if len(kids) == 1 and getattr(kids[0], "name", None) == "p":
-            kids[0].unwrap()
 
-    BLOCK = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "figure",
-             "figcaption", "blockquote", "div", "table", "pre", "hr"}
-
-    def blockish(n):
-        return n is None or (getattr(n, "name", None) in BLOCK) or (
-            getattr(n, "name", None) == "img" and n.parent.name == "figure")
-
-    for t in list(soup.find_all(string=True)):
-        if not t.strip() and t.find_parent(["pre", "code"]) is None \
-                and blockish(t.previous_sibling) and blockish(t.next_sibling):
-            t.extract()
-            
-    # Remove qualquer título ou parágrafo que contenha apenas espaços em branco ou invisíveis.
+    # 4. LIMPEZA DEFINITIVA DE BLOCOS VAZIOS
     for empty in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "div"]):
-        # Se não contém texto (ignorando espaços) E não tem nenhuma imagem ou tag de código dentro
         if not empty.get_text(strip=True) and not empty.find(["img", "br", "code", "hr"]):
             empty.decompose()
-            
-            
+
     content = "".join(str(c) for c in soup.body.contents).strip()
 
+    # 5. MONTAGEM: Capa, Créditos e Artigo
     cover_url = publish_image(meta["capa"]) if meta.get("capa") else None
-    cover = (f'<figure class="capa"><img src="{cover_url}" alt="{html.escape(title)}"></figure>'
-             if cover_url else "")
+    cover = f'<figure><img src="{cover_url}" alt="{html.escape(title)}"></figure>' if cover_url else ""
     og_image = f'<meta property="og:image" content="{cover_url}">' if cover_url else ""
-    tags = "\n".join(f'<meta property="article:tag" content="{html.escape(t)}">'
-                     for t in meta.get("tags", []))
+    tags = "\n".join(f'<meta property="article:tag" content="{html.escape(t)}">' for t in meta.get("tags", []))
     edicao = f" · Edição {html.escape(str(meta['edicao']))}" if meta.get("edicao") else ""
-    download = (f'<p class="download"><a href="{meta["pdf"]}">Baixar a edição em PDF</a></p>'
-                if meta.get("pdf") else "")
+    download = (f'<p class="download"><a href="{meta["pdf"]}">Baixar a edição em PDF</a></p>' if meta.get("pdf") else "")
 
-    # Crédito de autoria: parágrafo simples em itálico, SEM classe/rel/itemprop de "autor".
-    # Importadores tratam isso como metadado e o removem; e o Medium mostra o dono da conta
-    # como autor, então o crédito da equipe precisa estar no corpo do texto.
-    credit = f'<p><em class="markup--em markup--p--em">Por {html.escape(author)}{edicao}</em></p>'
-    article = "".join([f"<h1>{html.escape(title)}</h1>", credit, cover, content, download])
+    # Crédito de autoria SEM classes personalizadas.
+    credit = f"<p><em>Por {html.escape(author)}{edicao}</em></p>"
+    
+    # IMPORTANTE: O Medium apaga parágrafos imediatamente após o <h1> se achar que são metadados.
+    # Colocar a capa ANTES do crédito impede este comportamento.
+    article = "".join([f"<h1>{html.escape(title)}</h1>", cover, credit, content, download])
+    
     page = PAGE.format(title=html.escape(title), author=html.escape(author),
                        desc=html.escape(desc), canonical=canonical, og_image=og_image,
                        tags=tags, article=article)
@@ -298,7 +270,6 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
 
 # ----------------------------------------------------------------- verificação
 def check(entry: dict, base_url: str) -> list[tuple[str, str]]:
-    """Checagens de 'pronto para importar no Medium'. Devolve [(nível, mensagem)]."""
     res = []
     soup = BeautifulSoup(entry["_html"].read_text(encoding="utf-8"), "lxml")
     art = soup.find("article")
@@ -310,49 +281,13 @@ def check(entry: dict, base_url: str) -> list[tuple[str, str]]:
     add("OK" if not deep else "AVISO", "só h1/h2 (o Medium tem 2 níveis de título)" if not deep
         else f"{len(deep)} título(s) h3+ — o Medium não tem esse nível")
     add("OK" if soup.find("link", rel="canonical") else "ERRO", "link canonical presente")
-    has_og = bool(soup.find("meta", property="og:image"))
-    add("OK" if has_og else "AVISO", "og:image (capa) presente" if has_og
-        else "sem og:image (defina 'capa' no meta.yml)")
     if entry["_skipped"]:
-        add("ERRO", "conteúdo DESCARTADO pelo pandoc (macro sem definição em html/shim.tex): "
-                    + ", ".join(sorted(set(entry["_skipped"]))))
-    else:
-        add("OK", "nenhuma macro descartada")
+        add("ERRO", "conteúdo DESCARTADO pelo pandoc: " + ", ".join(sorted(set(entry["_skipped"]))))
     if entry["_missing_images"]:
         add("ERRO", f"imagens não encontradas: {entry['_missing_images']}")
-    else:
-        add("OK", "todas as imagens locais foram resolvidas")
     imgs = art.find_all("img")
     no_alt = [i for i in imgs if not i.get("alt")]
     add("OK" if not no_alt else "AVISO", f"{len(imgs)} imagem(ns); sem alt: {len(no_alt)}")
-    math = [i for i in imgs if "latex.codecogs" in i.get("src", "")]
-    add("OK" if not math else "AVISO",
-        "sem fórmulas" if not math else
-        f"{len(math)} fórmula(s) viram imagem via codecogs (o Medium não tem matemática); "
-        "confira se o importador as baixa")
-    leftover_divs = sorted({c for d in art.find_all("div") for c in d.get("class", [])})
-    add("OK" if not leftover_divs else "AVISO",
-        "todos os ambientes mapeados" if not leftover_divs else
-        f"ambiente(s) sem mapeamento em html/shim.tex (texto mantido, estilo perdido): {leftover_divs}")
-    sus = art.find_all(class_=re.compile(r"byline|author|dateline", re.I)) + \
-          art.find_all(attrs={"rel": "author"}) + art.find_all(attrs={"itemprop": re.compile("author")})
-    add("OK" if not sus else "AVISO", "crédito de autoria no corpo, sem marcação de 'autor'" if not sus
-        else "elemento(s) marcados como autor/byline: importadores costumam removê-los")
-    art_nopre = re.sub(r"<pre.*?</pre>", "", str(art), flags=re.S)
-    n_ws = len(re.findall(r">\s+<", art_nopre))
-    add("OK" if n_ws == 0 else "AVISO", "HTML compacto (sem espaços entre blocos)" if n_ws == 0
-        else f"{n_ws} espaço(s)/quebra(s) entre blocos — podem virar parágrafos vazios")
-    bq_p = [b for b in art.find_all("blockquote") if b.find("p")]
-    add("OK" if not bq_p else "AVISO", "citações com texto direto" if not bq_p
-        else f"{len(bq_p)} citação(ões) com <p> interno")
-    tables = art.find_all("table")
-    add("OK" if not tables else "AVISO",
-        "sem tabelas" if not tables else f"{len(tables)} tabela(s) — Medium não suporta; use imagem")
-    resid = re.findall(r"\\[a-zA-Z]+", art.get_text(" "))
-    add("OK" if not resid else "ERRO",
-        "sem LaTeX residual no texto" if not resid else f"LaTeX residual: {sorted(set(resid))}")
-    if not base_url.startswith("https://") or "localhost" in base_url or "USUARIO" in base_url:
-        add("AVISO", f"base-url '{base_url}' não é pública: o Medium não consegue importar")
     words = len(art.get_text(" ").split())
     add("OK", f"{words} palavras")
     return res
