@@ -31,7 +31,11 @@ jobs:
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"
           REPO="${GITHUB_REPOSITORY#*/}"
           python build_html.py --out dist --base-url "https://${OWNER}.github.io/${REPO}"
-
+      - name: Gerador de Testes para Medium 
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          REPO="${GITHUB_REPOSITORY#*/}"
+          python probe.py --out dist --base-url "https://${OWNER}.github.io/${REPO}"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
