@@ -189,21 +189,29 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
     # caixa informativa -> citação com classe (o Medium só conhece citação)
     for div in soup.select("div.hypeinfobox"):
         div.name = "blockquote"
-        div["class"] = ["infobox"]
+        div.attrs = {} # Limpa atributos customizados que o Medium rejeita
 
-    # Citações (\highlight e infobox): o Medium ignora CSS e lida melhor com texto direto
-    # dentro do <blockquote>; parágrafos internos viram "<br><br>".
     for bq in soup.find_all("blockquote"):
+        # Se houver duas caixas adjacentes, insere "***" entre elas.
+        # O Medium traduz "***" para a sua quebra visual de secção (três pontos), impedindo a fusão.
         next_sib = bq.find_next_sibling()
-        if(next_sib and next_sib.name == "blockquote"):
-            sep = soup.new_tag("hr")
+        if next_sib and next_sib.name == "blockquote":
+            sep = soup.new_tag("p")
+            sep.string = "***"
             bq.insert_after(sep)
 
+    for math_img in soup.find_all("img", src=re.compile(r"latex\.codecogs")):
+        formula_text = math_img.get("alt", "")
+        # Envolve a fórmula num <code> para destacar visualmente no Medium
+        code_tag = soup.new_tag("code")
+        code_tag.string = formula_text
+        math_img.replace_with(code_tag)
+        
     # imagens: copiar para dist/ e reescrever para URL absoluta
     missing = []
     for img in soup.find_all("img"):
         src = img.get("src", "")
-        if "latex.codecogs" in src or src.startswith(("http://", "https://")):
+        if src.startswith(("http://", "https://")):
             continue
         new = publish_image(src)
         if new is None:
@@ -211,22 +219,25 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
         else:
             img["src"] = new
             
-        if not img.get("alt"):
-            fig = img.find_parent("figure")
-            cap = fig.find("figcaption").get_text(" ", strip=True) if fig and fig.find("figcaption") else ""
-            img["alt"] = cap
-    
-    for fig in soup.find_all("figure"):
+        fig = img.find_parent("figure")
+        if not fig:
+            fig = soup.new_tag("figure")
+            img.wrap(fig)
+            
+        # Extrai a legenda do figcaption existente (se houver) ou do alt
+        cap_text = img.get("alt", "").strip()
         fc = fig.find("figcaption")
-        if fc and fc.get_text(strip=True):
-            legenda_texto = fc.get_text(" ", strip=True)
-            p_legenda = soup.new_tag("p")
-            em_legenda = soup.new_tag("em")
-            em_legenda.string = legenda_texto
-            p_legenda.append(em_legenda)
-            # Insere o <p><em> logo após a figure e remove o figcaption problemático
-            fig.insert_after(p_legenda)
-            fc.decompose()
+        if fc:
+            if not cap_text:
+                cap_text = fc.get_text(strip=True)
+            fc.decompose() # Removemos a legenda antiga com classes sujas
+            
+        # Reconstrói a legenda de forma canónica
+        if cap_text:
+            img["alt"] = cap_text
+            new_fc = soup.new_tag("figcaption")
+            new_fc.string = cap_text
+            fig.append(new_fc)
         
     for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
         h.attrs.pop("id", None)
@@ -250,8 +261,9 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
             t.extract()
             
     # Remove qualquer título ou parágrafo que contenha apenas espaços em branco ou invisíveis.
-    for empty in soup.find_all(["h1", "h2", "h3"]):
-        if not empty.find(["img", "br"]) and not re.sub(r'\s+', '', empty.get_text()):
+    for empty in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "p", "div"]):
+        # Se não contém texto (ignorando espaços) E não tem nenhuma imagem ou tag de código dentro
+        if not empty.get_text(strip=True) and not empty.find(["img", "br", "code", "hr"]):
             empty.decompose()
             
             
