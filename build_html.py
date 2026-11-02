@@ -194,17 +194,11 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
     # Citações (\highlight e infobox): o Medium ignora CSS e lida melhor com texto direto
     # dentro do <blockquote>; parágrafos internos viram "<br><br>".
     for bq in soup.find_all("blockquote"):
-        paras = bq.find_all("p", recursive=False)
-        if not paras:
-            continue
-        moved = []
-        for i, para in enumerate(paras):
-            if i:
-                moved += [soup.new_tag("br"), soup.new_tag("br")]
-            moved += list(para.contents)
-        bq.clear()
-        for node in moved:
-            bq.append(node)
+        next_sib = bq.find_next_sibling()
+        if(next_sib and next_sib.name == "blockquote"):
+            sep = soup.new_tag("p")
+            sep.append(soup.new_tag("br"))
+            bq.insert_after(sep)
 
     # imagens: copiar para dist/ e reescrever para URL absoluta
     missing = []
@@ -221,8 +215,14 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
             fig = img.find_parent("figure")
             cap = fig.find("figcaption").get_text(" ", strip=True) if fig and fig.find("figcaption") else ""
             img["alt"] = cap
+    
     for fc in soup.find_all("figcaption"):
         fc.attrs.pop("aria-hidden", None)
+        fc["class"] = "imageCaption"
+        fc["conteneditable"] = "true"
+        fc["data-default-value"] = "Caption here!"
+        
+        
     for h in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
         h.attrs.pop("id", None)
         h.attrs.pop("class", None)
@@ -243,6 +243,10 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
         if not t.strip() and t.find_parent(["pre", "code"]) is None \
                 and blockish(t.previous_sibling) and blockish(t.next_sibling):
             t.extract()
+            
+    for empty in soup.find_all(["h1", "h2", "h3"]):
+        if not empty.get_text(strip=True) and not empty.find("img", "br"):
+            empty.decompose()
     content = "".join(str(c) for c in soup.body.contents).strip()
 
     cover_url = publish_image(meta["capa"]) if meta.get("capa") else None
@@ -258,7 +262,7 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
     # Crédito de autoria: parágrafo simples em itálico, SEM classe/rel/itemprop de "autor".
     # Importadores tratam isso como metadado e o removem; e o Medium mostra o dono da conta
     # como autor, então o crédito da equipe precisa estar no corpo do texto.
-    credit = f"<p><em>Por {html.escape(author)}{edicao}</em></p>"
+    credit = f'<p><em class="markup--em markup--p--em">Por {html.escape(author)}{edicao}</em></p>'
     article = "".join([f"<h1>{html.escape(title)}</h1>", credit, cover, content, download])
     page = PAGE.format(title=html.escape(title), author=html.escape(author),
                        desc=html.escape(desc), canonical=canonical, og_image=og_image,
