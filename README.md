@@ -21,19 +21,6 @@ artigo.tex ──pandoc + shim──▶ HTML limpo ──GitHub Pages──▶ U
 
 Título e autor vêm do próprio `\hypearticle` (fonte única); o `meta.yml` só guarda o restante.
 
-## Rodar localmente 
-Corrigido
-
-```bash
-pip install -r requirements.txt   # + pandoc instalado
-python build_html.py              # converte e verifica tudo em articles/
-python build_html.py --base-url https://SEU-USUARIO.github.io/SEU-REPO
-```
-
-O script sai com código 1 se houver **ERRO** (útil no CI). **AVISO** não bloqueia, mas é algo a olhar.
-
-PDF do harness: `cd stub && latexmk -xelatex -outdir=build main.tex`
-
 ## Executar o teste de viabilidade
 
 1. Crie um repositório **público** de teste (Pages gratuito exige repo público; o Medium também precisa de URL pública) e envie esta pasta.
@@ -46,18 +33,18 @@ PDF do harness: `cd stub && latexmk -xelatex -outdir=build main.tex`
 
 | Item | Esperado | Resultado |
 |---|---|---|
-| Título | Igual ao `\hypearticle` | |
-| Subtítulos | `\subtitle` vira cabeçalho | |
-| Capa/imagem da figura | Baixadas e exibidas | |
-| Legenda da figura | Mantida | |
-| Lista | 4 itens | |
-| `\highlight` / `infobox` | Citação (a infobox perde a cor) | |
-| Fórmula `E = mc²` | Imagem (ou perda) | |
-| Canonical | Aponta para a URL do site (ver em *Advanced settings* e no código-fonte da página publicada) | |
-| Data | Data original | |
-| Link "Fonte original" | Clicável | |
+| Título | Igual ao `\hypearticle` |✓|
+| Subtítulos | `\subtitle` vira cabeçalho |X|
+| Capa/imagem da figura | Baixadas e exibidas |✓ |
+| Legenda da figura | Mantida |X|
+| Lista | 4 itens | |✓
+| `\highlight` / `infobox` | Citação (a infobox perde a cor) |X|
+| Fórmula `E = mc²` | Imagem (ou perda) |X|
+| Canonical | Aponta para a URL do site (ver em *Advanced settings* e no código-fonte da página publicada) |✓|
+| Data | Data original |✓|
+| Link "Fonte original" | Clicável |✓|
 
-**Critério de aprovação sugerido:** título, hierarquia, imagens, lista, citações e canonical corretos
+**Critério de aprovação:** título, hierarquia, imagens, lista, citações e canonical corretos
 sem retrabalho; fórmula e legenda podem exigir ajuste manual.
 
 ## Limitações conhecidas

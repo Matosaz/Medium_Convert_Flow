@@ -22,6 +22,10 @@ from pathlib import Path
 import yaml
 from bs4 import BeautifulSoup
 
+if hasattr(sys.stdout, "reconfigure"):       # console do Windows: evitar UnicodeEncodeError
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).resolve().parent
 SHIM = (ROOT / "html" / "shim.tex").read_text(encoding="utf-8")
 
@@ -89,14 +93,26 @@ def tex_inline_to_text(s: str) -> str:
     return re.sub(r"[{}]", "", s).strip()
 
 # ------------------------------------------------------------------ conversão
+PANDOC_HELP = """pandoc não encontrado no PATH.
+  Windows (PowerShell):  winget install --id JohnMacFarlane.Pandoc -e
+                         (ou baixe o instalador em https://pandoc.org/installing.html)
+  macOS:                 brew install pandoc
+  Linux (Debian/Ubuntu): sudo apt-get install pandoc
+Depois de instalar, FECHE e reabra o terminal e confira com:  pandoc --version"""
+
 def pandoc_body(body: str, workdir: Path):
     """Devolve (html, descartados). O pandoc DESCARTA em silêncio macros que não conhece
     (inclusive o argumento); só o modo --verbose avisa. Capturamos esses avisos."""
+    exe = shutil.which("pandoc")
+    if not exe:
+        raise RuntimeError(PANDOC_HELP)
     src = SHIM + "\n" + LAYOUT_ONLY.sub("", body)
-    cmd = ["pandoc", "-f", "latex", "-t", "html5", "--wrap=none", "--verbose",
+    cmd = [exe, "-f", "latex", "-t", "html5", "--wrap=none", "--verbose",
            "--shift-heading-level-by=1", "--webtex",
            f"--resource-path={workdir}"]
-    r = subprocess.run(cmd, input=src, capture_output=True, text=True)
+    # encoding explícito: no Windows o padrão seria cp1252 e os acentos seriam corrompidos
+    r = subprocess.run(cmd, input=src, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError("pandoc falhou:\n" + r.stderr)
     found = re.findall(r"Skipped '(.+?)' at line", r.stderr)
@@ -126,7 +142,7 @@ PAGE = """<!doctype html>
   body {{ font:18px/1.7 Georgia,serif; max-width:42rem; margin:3rem auto; padding:0 1rem; color:#111; }}
   h1 {{ font:800 2.2rem/1.2 system-ui,sans-serif; }}
   h2 {{ font:700 1.4rem/1.3 system-ui,sans-serif; margin-top:2.2rem; }}
-  .byline {{ color:#555; font-family:system-ui,sans-serif; }}
+  article > h1 + p {{ color:#555; font-family:system-ui,sans-serif; }}  /* crédito de autoria */
   img {{ max-width:100%; height:auto; }}
   figure {{ margin:2rem 0; text-align:center; }}
   figcaption {{ font:.85rem system-ui,sans-serif; color:#555; }}
@@ -138,13 +154,7 @@ PAGE = """<!doctype html>
 </style>
 </head>
 <body>
-<article>
-<h1>{title}</h1>
-<p class="byline">Por {author}{edicao}</p>
-{cover}
-{content}
-{download}
-</article>
+<article>{article}</article>
 </body>
 </html>
 """
@@ -181,6 +191,21 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
         div.name = "blockquote"
         div["class"] = ["infobox"]
 
+    # Citações (\highlight e infobox): o Medium ignora CSS e lida melhor com texto direto
+    # dentro do <blockquote>; parágrafos internos viram "<br><br>".
+    for bq in soup.find_all("blockquote"):
+        paras = bq.find_all("p", recursive=False)
+        if not paras:
+            continue
+        moved = []
+        for i, para in enumerate(paras):
+            if i:
+                moved += [soup.new_tag("br"), soup.new_tag("br")]
+            moved += list(para.contents)
+        bq.clear()
+        for node in moved:
+            bq.append(node)
+
     # imagens: copiar para dist/ e reescrever para URL absoluta
     missing = []
     for img in soup.find_all("img"):
@@ -207,6 +232,17 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
         if len(kids) == 1 and getattr(kids[0], "name", None) == "p":
             kids[0].unwrap()
 
+    BLOCK = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "figure",
+             "figcaption", "blockquote", "div", "table", "pre", "hr"}
+
+    def blockish(n):
+        return n is None or (getattr(n, "name", None) in BLOCK) or (
+            getattr(n, "name", None) == "img" and n.parent.name == "figure")
+
+    for t in list(soup.find_all(string=True)):
+        if not t.strip() and t.find_parent(["pre", "code"]) is None \
+                and blockish(t.previous_sibling) and blockish(t.next_sibling):
+            t.extract()
     content = "".join(str(c) for c in soup.body.contents).strip()
 
     cover_url = publish_image(meta["capa"]) if meta.get("capa") else None
@@ -219,9 +255,14 @@ def build_article(folder: Path, out: Path, base_url: str) -> dict:
     download = (f'<p class="download"><a href="{meta["pdf"]}">Baixar a edição em PDF</a></p>'
                 if meta.get("pdf") else "")
 
+    # Crédito de autoria: parágrafo simples em itálico, SEM classe/rel/itemprop de "autor".
+    # Importadores tratam isso como metadado e o removem; e o Medium mostra o dono da conta
+    # como autor, então o crédito da equipe precisa estar no corpo do texto.
+    credit = f"<p><em>Por {html.escape(author)}{edicao}</em></p>"
+    article = "".join([f"<h1>{html.escape(title)}</h1>", credit, cover, content, download])
     page = PAGE.format(title=html.escape(title), author=html.escape(author),
                        desc=html.escape(desc), canonical=canonical, og_image=og_image,
-                       tags=tags, edicao=edicao, cover=cover, content=content, download=download)
+                       tags=tags, article=article)
     (art_out / "index.html").write_text(page, encoding="utf-8")
 
     return {"slug": slug, "title": title, "author": author, "descricao": desc,
@@ -269,6 +310,17 @@ def check(entry: dict, base_url: str) -> list[tuple[str, str]]:
     add("OK" if not leftover_divs else "AVISO",
         "todos os ambientes mapeados" if not leftover_divs else
         f"ambiente(s) sem mapeamento em html/shim.tex (texto mantido, estilo perdido): {leftover_divs}")
+    sus = art.find_all(class_=re.compile(r"byline|author|dateline", re.I)) + \
+          art.find_all(attrs={"rel": "author"}) + art.find_all(attrs={"itemprop": re.compile("author")})
+    add("OK" if not sus else "AVISO", "crédito de autoria no corpo, sem marcação de 'autor'" if not sus
+        else "elemento(s) marcados como autor/byline: importadores costumam removê-los")
+    art_nopre = re.sub(r"<pre.*?</pre>", "", str(art), flags=re.S)
+    n_ws = len(re.findall(r">\s+<", art_nopre))
+    add("OK" if n_ws == 0 else "AVISO", "HTML compacto (sem espaços entre blocos)" if n_ws == 0
+        else f"{n_ws} espaço(s)/quebra(s) entre blocos — podem virar parágrafos vazios")
+    bq_p = [b for b in art.find_all("blockquote") if b.find("p")]
+    add("OK" if not bq_p else "AVISO", "citações com texto direto" if not bq_p
+        else f"{len(bq_p)} citação(ões) com <p> interno")
     tables = art.find_all("table")
     add("OK" if not tables else "AVISO",
         "sem tabelas" if not tables else f"{len(tables)} tabela(s) — Medium não suporta; use imagem")
