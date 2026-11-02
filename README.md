@@ -21,7 +21,8 @@ artigo.tex ──pandoc + shim──▶ HTML limpo ──GitHub Pages──▶ U
 
 Título e autor vêm do próprio `\hypearticle` (fonte única); o `meta.yml` só guarda o restante.
 
-## Rodar localmente
+## Rodar localmente 
+Corrigido
 
 ```bash
 pip install -r requirements.txt   # + pandoc instalado
